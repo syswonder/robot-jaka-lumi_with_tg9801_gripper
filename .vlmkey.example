@@ -1,0 +1,14 @@
+# Copy to .vlmkey (gitignored) and fill in. start.sh sources it before boot.
+#
+# Pilot's VLM. rbnx expands ${VLM_BASE_URL} etc. from the manifest, which reads
+# them from the process environment — i.e. from this file.
+export VLM_BASE_URL="https://api.example.com/v1"
+export VLM_API_KEY="sk-replace-me"
+export VLM_MODEL="deepseek-v4-flash"
+
+# Head RGB-D camera serial number. Lumi carries two identical Gemini 2L units
+# and the orbbec primitive pins the device by serial, so the mapping camera
+# cannot be swapped by a reboot.
+# Find it with:  python3 -c "import pyorbbecsdk"  (or the vendor demo's
+#                `--list-cameras`), or `lsusb -d 2bc5:` plus a physical check.
+export LUMI_HEAD_CAMERA_SN="CP0XXXXXXX"

@@ -1,0 +1,135 @@
+# Body description for the JAKA Lumi mobile manipulator with a TG-9801 gripper.
+#
+# Frames come from urdf/jaka_lumi.urdf, produced by tools/prepare_urdf.py from
+# the vendor JAKA-Lumi-sensors-v3 export. Three things that script guarantees
+# and this file relies on:
+#   * base_link is REP-103 (X forward, Y left); the CAD chassis hangs below it
+#     as base_link_chassis, rotated 90 deg.
+#   * the six arm joints are named joint_1..joint_6, matching the reused arm
+#     primitive's hardcoded JOINT_NAMES.
+#   * the four body joints keep the vendor names l_1..l_4, matching lumi_body.
+#
+# Soma validates only `urdf.path` and `robot.id`; `type`, `urdf_link` and the
+# provider ids below are read by consumers, so they must stay in sync with
+# robonix_manifest.yaml and the package manifests.
+
+urdf:
+  path: ./urdf/jaka_lumi.urdf
+  root_link: base_link
+  model_name: jaka_lumi
+
+robot:
+  id: jaka_lumi_01
+  display_name: "JAKA Lumi"
+  family: mobile_manipulator
+  root_part: base
+  dimensions:
+    width_m: 0.510
+    depth_m: 0.510
+    # Hardware manual 5.1.1: overall height at the bottom / top of the lift.
+    height_min_m: 1.460
+    height_max_m: 1.860
+  # Sum of the URDF link inertials (the CAD chassis alone accounts for 117.5 kg).
+  mass_kg: 145.86
+  footprint:
+    base_frame: base_link
+    # 510 x 510 mm chassis centred on base_link. Square, so the vendor CAD's
+    # 90 deg yaw offset does not change the outline. Verify in RViz before
+    # trusting it for narrow passages.
+    points: [[0.255, 0.255], [0.255, -0.255], [-0.255, -0.255], [-0.255, 0.255]]
+  components:
+    - id: base
+      type: differential_drive_chassis
+      urdf_link: base_link
+      exports:
+        - provider_id: lumi_chassis
+          capabilities:
+            - {path: robonix/primitive/chassis/odom,     description: "Chassis pose (vendor SLAM, odom frame) plus the odom -> base_link TF."}
+            - {path: robonix/primitive/chassis/move,     description: "Single-shot motion: forward_m, rotate_deg or a bounded velocity burst."}
+            - {path: robonix/primitive/chassis/twist_in, description: "Continuous velocity inlet on /cmd_vel (what Nav2 publishes)."}
+      components:
+        - id: lidar
+          type: lidar_2d
+          urdf_link: Radar_Link
+          # The 240 deg laser feeds the chassis firmware's own SLAM. The AGV API
+          # exposes maps, markers and distance probes but no scan or point cloud,
+          # so there is no lidar provider to bind here.
+          exports: []
+        - id: chassis_camera
+          type: mono_camera
+          urdf_link: Camera1_Link
+          # Small (11.5 g) sensor belonging to the base's SLAM/anti-collision
+          # stack; not on the USB bus we can reach.
+          exports: []
+
+    - id: torso
+      type: body_joint_group
+      urdf_link: link_1
+      urdf_joint: l_1
+      exports:
+        - provider_id: lumi_body
+          capabilities:
+            - {path: robonix/primitive/body/joint_states,  description: "Lift (m), waist and head yaw/pitch (rad) on /joint_states."}
+            - {path: robonix/primitive/body/joint_command, description: "Position targets for the same four joints."}
+      components:
+        - id: torso_camera
+          type: rgbd_camera
+          urdf_link: Camera2_Link
+          # Second RGB-D camera, the one the vendor hand-eye calibration targets
+          # (grasp guidance). Not driven in V1: both cameras share one USB 3.0
+          # port on the base panel. Wire it as a second orbbec instance later.
+          exports: []
+        - id: head
+          type: pan_tilt_head
+          urdf_link: link_3
+          urdf_joint: l_3
+          exports: []
+          components:
+            - id: head_camera
+              type: rgbd_camera
+              urdf_link: Camera3_Link
+              exports:
+                - provider_id: head_camera
+                  capabilities:
+                    - {path: robonix/primitive/camera/rgb,         description: "Color stream (1280x720), the mapping input."}
+                    - {path: robonix/primitive/camera/depth,       description: "Depth stream hardware-aligned to color."}
+                    - {path: robonix/primitive/camera/camera_info, description: "Color stream intrinsics."}
+        - id: arm
+          type: manipulator
+          urdf_link: link_a1
+          urdf_joint: joint_1
+          exports:
+            - provider_id: jaka_arm
+              capabilities:
+                - {path: robonix/primitive/arm/joint_states,  description: "Arm joints (rad) and gripper_joint (m)."}
+                - {path: robonix/primitive/arm/joint_command, description: "Arm joint position targets."}
+                - {path: robonix/primitive/arm/pos_command,   description: "Cartesian end-effector target, IK done by the provider."}
+                - {path: robonix/primitive/arm/end_pose,      description: "End-effector pose in the arm base frame (link_2)."}
+          components:
+            - id: gripper
+              type: parallel_jaw_gripper
+              urdf_link: link_at
+              state:
+                joint_name: gripper_joint
+                # TG-9801 full stroke; re-measure during acceptance.
+                open_position_m: 0.098
+                open_tolerance_m: 0.005
+              exports: []
+
+description:
+  summary: >-
+    12-DOF mobile manipulator: JAKA Mini 2 arm with a TG-9801 gripper on a
+    waist-mounted lift column, differential-drive base, and two RGB-D cameras
+    (head + torso). The head camera plus a 240 deg base laser give mapping and
+    obstacle sensing on the vendor side.
+  can_do:
+    - "differential-drive navigation (Robonix mapping + Nav2, or the vendor's own navigation)"
+    - "arm joint-space and Cartesian motion with a 2 kg payload"
+    - "gripper open/close with adaptive force"
+    - "lift, waist and head pose adjustment"
+    - "RGB-D mapping and map-frame localization with the head camera"
+  cannot_do:
+    - "read the 240 deg laser scan (closed inside the base firmware)"
+    - "dynamic obstacle avoidance in Nav2 (no scan provider, static map only)"
+    - "drive both RGB-D cameras at once on V1 (single USB 3.0 port on the base panel)"
+    - "mix the vendor map and the Robonix map without an explicit vendor_pose_offset"

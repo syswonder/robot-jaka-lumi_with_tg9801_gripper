@@ -1,0 +1,181 @@
+# Nav2 parameters for the JAKA Lumi deployment.
+#
+# Derived from service-navigation-rbnx/config/nav2_params.example.yml with two
+# deliberate changes:
+#
+#   1. AMCL is removed. Localization comes from Mapping (RTAB-Map), which owns
+#      map -> odom; a second laser-based localizer would fight it.
+#   2. Every scan-topic token and its obstacle_layer is removed. The base's
+#      240 deg lidar is closed inside the chassis firmware, so this deployment
+#      has no scan provider. Leaving the token in would make Driver(CMD_INIT)
+#      fail: the wrapper refuses to start with an unresolved ROBONIX token, and
+#      it scans the whole file, comments included.
+#
+# Consequence: the costmaps are static-map + inflation only. Nav2 plans around
+# walls it already knows about and cannot see a new obstacle. The chassis
+# firmware still stops on contact, and `lumi_chassis` exposes the vendor's own
+# obstacle-avoiding navigation through chassis/move. Adding a depth -> point
+# cloud -> LaserScan provider is the documented V2 path (README, Known limits).
+#
+# Remaining tokens are resolved by the wrapper from the Atlas providers:
+#   __ROBONIX_MAP_TOPIC__  -> the mapping provider's occupancy grid
+#   __ROBONIX_FOOTPRINT__  -> Soma's footprint polygon
+
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: ""
+
+map_saver:
+  ros__parameters:
+    use_sim_time: false
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: true
+
+planner_server:
+  ros__parameters:
+    use_sim_time: false
+    expected_planner_frequency: 5.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+    tf_buffer_duration: 0.5
+
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    controller_frequency: 5.0
+    failure_tolerance: 0.5
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.1
+      movement_time_allowance: 30.0
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.25
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+      debug_trajectory_details: True
+      # Matches lumi_chassis max_linear_m_s / max_angular_rad_s; the provider
+      # rejects anything faster anyway.
+      min_vel_x: 0.00
+      min_vel_y: 0.0
+      max_vel_x: 0.30
+      max_vel_y: 0.0
+      max_vel_theta: 0.50
+      min_speed_xy: 0.0
+      max_speed_xy: 0.35
+      min_speed_theta: 0.05
+      acc_lim_x: 0.3
+      acc_lim_y: 0.0
+      acc_lim_theta: 0.8
+      decel_lim_x: -0.3
+      decel_lim_y: -0.0
+      decel_lim_theta: -0.8
+      vx_samples: 20
+      vy_samples: 5
+      vtheta_samples: 240
+      sim_time: 2.5
+      linear_granularity: 0.05
+      angular_granularity: 0.05
+      transform_tolerance: 0.5
+      short_circuit_trajectory_evaluation: True
+      stateful: True
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      BaseObstacle.scale: 0.015
+      PathAlign.scale: 1.0
+      GoalAlign.scale: 0.2
+      PathDist.scale: 0.5
+      GoalDist.scale: 2.0
+      RotateToGoal.xy_goal_tolerance: 0.20
+      RotateToGoal.scale: 1.0
+      RotateToGoal.slowing_factor: 1.0
+      RotateToGoal.lookahead_time: 0.5
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: false
+    default_bt_xml_filename: ""
+    tf_buffer_duration: 0.5
+
+# Kept under the upstream example's section name. Recent Nav2 releases call the
+# node `behavior_server`; both sections are harmless because Nav2 ignores a
+# parameter block for a node that is not running.
+recoveries_server:
+  ros__parameters:
+    costmap_topic: global_costmap/costmap
+    footprint_topic: global_costmap/published_footprint
+
+behavior_server:
+  ros__parameters:
+    costmap_topic: global_costmap/costmap
+    footprint_topic: global_costmap/published_footprint
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 10.0
+      publish_frequency: 10.0
+      global_frame: odom
+      robot_base_frame: base_link
+      use_sim_time: false
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      footprint: "__ROBONIX_FOOTPRINT__"
+      footprint_padding: 0.05
+      # No obstacle_layer: no scan source in this deployment (see header).
+      plugins: ["inflation_layer"]
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        # Half the chassis diagonal is 0.36 m; keep the local window tight so
+        # the controller still has free space in a 0.51 m wide corridor.
+        inflation_radius: 0.35
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: false
+      global_frame: map
+      robot_base_frame: base_link
+      footprint: "__ROBONIX_FOOTPRINT__"
+      footprint_padding: 0.05
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      resolution: 0.05
+      rolling_window: false
+      track_unknown_space: true
+      # No obstacle_layer: see the header comment.
+      plugins: ["static_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+        enabled: true
+        map_topic: "__ROBONIX_MAP_TOPIC__"
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        # Generous margin in the global plan: without a live obstacle layer this
+        # is the only thing keeping the path away from walls.
+        inflation_radius: 0.55
+
+lifecycle_manager:
+  ros__parameters:
+    use_sim_time: false
+    autostart: true
+    node_names:
+      - planner_server
+      - controller_server
+      - bt_navigator
+      - recoveries_server

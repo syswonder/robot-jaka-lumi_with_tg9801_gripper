@@ -1,0 +1,40 @@
+# RTAB-Map parameters for the JAKA Lumi deployment.
+#
+# Copied from service-map-rbnx/config/rtabmap_params.template.yaml and tuned
+# for the head-mounted Orbbec Gemini 2L. The Mapping service does NOT load the
+# upstream template at runtime; it reads this file through
+# config.params_file, resolved relative to robonix_manifest.yaml.
+#
+# There is no laser input: the base's 240 deg lidar never leaves the chassis
+# firmware, so RGB-D plus external odometry is the only usable mode.
+
+# Occupancy grid built from the depth image.
+RGBD/CreateOccupancyGrid: true
+# The head camera sits ~1.6 m up and sees 2-10 m; 6 m keeps far-away noisy
+# returns out of the grid without clipping the corridor ahead.
+Grid/RangeMax: 6.0
+Grid/CellSize: 0.05
+Grid/RayTracing: true
+Grid/3D: false
+Grid/NormalsSegmentation: false
+# Anything above 1.2 m is not a floor obstacle for a 1.86 m tall robot; the
+# lift column and the arm live well above this during normal driving.
+Grid/MaxObstacleHeight: 1.2
+Grid/MaxGroundHeight: 0.1
+
+# 1 = ICP refinement, 2 = visual. ICP keeps the map stable when the robot
+# stops and the head camera sees mostly featureless floor.
+Reg/Strategy: 1
+Reg/Force3DoF: true
+Optimizer/Strategy: 1
+RGBD/NeighborLinkRefining: true
+RGBD/ProximityBySpace: true
+# Update thresholds: the chassis odom is a vendor SLAM pose, not wheel
+# odometry, so keep nodes moderately spaced to avoid map bloat.
+RGBD/AngularUpdate: 0.15
+RGBD/LinearUpdate: 0.15
+Vis/MinInliers: 12
+Rtabmap/DetectionRate: 1.0
+Icp/MaxCorrespondenceDistance: 0.2
+Icp/MaxTranslation: 0.5
+Icp/MaxRotation: 0.78

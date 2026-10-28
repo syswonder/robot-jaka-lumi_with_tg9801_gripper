@@ -1,0 +1,154 @@
+# Robonix deployment for the JAKA Lumi mobile manipulator with a TG-9801
+# gripper. Committed form: every package is referenced by its repository URL.
+# On a machine with sibling checkouts, robonix_manifest.local.yaml (gitignored)
+# substitutes `path:` entries so build and boot use the working trees directly.
+manifestVersion: 1
+name: robonix-jaka-lumi_with_tg9801_gripper
+
+catalog:
+  name: robonix.robot.jaka.lumi_with_tg9801_gripper
+  version: 0.1.0
+  description: Robonix deployment for the JAKA Lumi mobile manipulator with TG-9801 gripper.
+  license: Apache-2.0
+  tags: [robot, deploy, mobile_manipulator, jaka, lumi, gripper]
+  maintainers:
+    - Felix Xi <xi.lifeng@qq.com>
+
+env:
+  ROS_DOMAIN_ID: "0"
+  RMW_IMPLEMENTATION: rmw_zenoh_cpp
+  ROBONIX_ZENOH_MODE: client
+  ROBONIX_ZENOH_ROUTER: tcp/0.0.0.0:7447
+  # Host-side provider code runs on the deployment venv: the generated gRPC
+  # bindings need grpcio >= 1.76, while the system python3 pins an older one
+  # for JetPack. ${PWD} is expanded by `rbnx boot` at startup, so always invoke
+  # boot from this directory (start.sh does).
+  PATH: "${PWD}/.venv/bin:${PATH}"
+
+system:
+  atlas:
+    listen: 0.0.0.0:50051
+  soma:
+    listen: 0.0.0.0:50091
+    # The ROS 2 runtime reader needs rclpy + sensor_msgs + nav_msgs; the boot
+    # shell may not have ROS sourced, so wrap it in bash. No $VAR here: rbnx
+    # expands those itself.
+    runtime_reader_command:
+      - bash
+      - -c
+      - "source /opt/ros/humble/setup.bash && exec python3 -u {script} {config}"
+  executor:
+    listen: 0.0.0.0:50061
+  pilot:
+    listen: 0.0.0.0:50071
+    vlm:
+      upstream: ${VLM_BASE_URL}
+      api_key: ${VLM_API_KEY}
+      model: ${VLM_MODEL}
+  vitals:
+    listen: 0.0.0.0:50093
+  liaison:
+    listen: 0.0.0.0:50081
+
+primitive:
+  - name: robot_description
+    url: https://github.com/syswonder/primitive-robot-description-rbnx
+    branch: main
+    # Native mode: robot_state_publisher runs on the host (no docker), and it
+    # is what turns /joint_states into the TF tree.
+    manifest: package_manifest.native.yaml
+
+  - name: jaka_arm
+    url: https://github.com/syswonder/primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx
+    branch: main
+    config:
+      # Lumi's cabinet address, NOT the mini's 10.5.5.100.
+      ip: 192.168.10.90
+      motion_enabled: false      # staged acceptance, see README
+      joint_speed_rad_s: 0.3
+      linear_speed_mm_s: 30.0
+      gripper_force: 30
+      gripper_speed: 1100
+      state_publish_hz: 50.0
+      # The arm sits on the waist, so Cartesian poses belong to the arm base
+      # frame, which is the parent of link_a1 in the deployment URDF.
+      base_frame: link_2
+      # Exit homing: open the gripper, then park at the all-zero reference pose
+      # before power-off. Only honoured while motion_enabled is true.
+      shutdown_home_joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+  - name: head_camera
+    url: https://github.com/syswonder/primitive-orbbec-camera-rbnx
+    branch: main
+    config:
+      launch_file: gemini2L.launch.py
+      camera_name: head_camera
+      # Two identical RGB-D units: pin the head one by serial so a reboot
+      # cannot silently swap the mapping camera for the torso one.
+      serial_number: ${LUMI_HEAD_CAMERA_SN}
+      depth_registration: true
+      # Manual 5.1.5: color 1280x800@30 or 1280x720@60; depth 1280x800@30 or
+      # 640x400@60. Mapping runs on 1280x720 + 640x400 to leave CPU for RTAB-Map.
+      color_width: 1280
+      color_height: 720
+      color_fps: 30
+      depth_width: 640
+      depth_height: 400
+      depth_fps: 30
+      sentinel_timeout_s: 30.0
+
+  - name: lumi_chassis
+    # TODO: publish this repository before switching the deployment to URLs.
+    url: https://github.com/syswonder/primitive-jaka-lumi-chassis-rbnx
+    branch: main
+    config:
+      host: 192.168.10.10
+      port: 31001
+      motion_enabled: false
+      odom_frame: odom
+      base_frame: base_link
+      publish_tf: true
+      odom_rate_hz: 10.0
+      max_linear_m_s: 0.3
+      max_angular_rad_s: 0.5
+      joy_rate_hz: 5.0
+      twist_timeout_s: 0.5
+      uuid: lumi
+
+  - name: lumi_body
+    # TODO: publish this repository before switching the deployment to URLs.
+    url: https://github.com/syswonder/primitive-jaka-lumi-body-rbnx
+    branch: main
+    config:
+      base_url: http://192.168.10.90:5000
+      motion_enabled: false
+      auto_enable: true
+      state_publish_hz: 10.0
+      joint_states_topic: /joint_states
+      lift_max_mm: 300.0
+      waist_max_deg: 140.0
+      default_vel_pct: 10
+      default_acc_pct: 10
+
+service:
+  - name: mapping
+    url: https://github.com/syswonder/service-map-rbnx
+    branch: main
+    config:
+      params_file: config/rtabmap_params.yaml
+      # RGB-D only: the base laser is not reachable, so RTAB-Map runs on the
+      # head camera and takes the chassis pose as its external odometry.
+      sensor_providers:
+        rgb: head_camera
+        depth: head_camera
+        odom: lumi_chassis
+
+  - name: navigation
+    url: https://github.com/syswonder/service-navigation-rbnx
+    branch: main
+    config:
+      params_file: config/nav2_params.yaml
+      provider_ids:
+        map: mapping
+        odom: lumi_chassis
+        # No `scan` / `scan_cloud` binding on purpose: see config/nav2_params.yaml
