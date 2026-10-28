@@ -59,11 +59,14 @@ robot-jaka-lumi_with_tg9801_gripper/
    （本机已就绪）。缺失时臂包的 `build.sh` 会 fail-fast 并提示路径。
 4. **`.vlmkey`**：`cp .vlmkey.example .vlmkey`，填 VLM 凭据与**头部相机序列号**
    （两台同型号相机必须按序列号绑定，否则可能把躯干相机当成建图相机）。
-5. **首次构建需要网络**：`robot_description` 走 `url:`，会被 clone 进
-   `rbnx-boot/cache/`；其余 6 个实例走 `path:` 指向 `~/` 下的兄弟目录：
-   `primitive-jaka-lumi-chassis-rbnx`、`primitive-jaka-lumi-body-rbnx`、
+5. **本地清单是全离线的**：`robonix_manifest.local.yaml` 把 7 个实例全部改成
+   `path:` 指向 `~/` 下的兄弟目录——`primitive-jaka-lumi-chassis-rbnx`、
+   `primitive-jaka-lumi-body-rbnx`、
    `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx`、
-   `primitive-orbbec-camera-rbnx`、`service-map-rbnx`、`service-navigation-rbnx`。
+   `primitive-orbbec-camera-rbnx`、`primitive-robot-description-rbnx`、
+   `service-map-rbnx`、`service-navigation-rbnx`。
+   提交版清单仍是 `url:`；没有这些兄弟目录的机器要么逐个 clone，要么用提交版
+   （首次构建需要网络）。
 
 ## 构建
 
@@ -157,6 +160,47 @@ rbnx shutdown -f ./robonix_manifest.local.yaml
 | 4 | 两套地图坐标系 | 厂商导航（`chassis/move` → `/api/move`）与 Robonix 的 map 不同源；混用会跑偏。可用 `lumi_chassis.vendor_pose_offset` 标定对齐 |
 | 5 | 底盘无轮式编码器 | `/odom` 是厂商 SLAM 位姿，`twist` 由位姿差分得出，精度不如轮速 |
 | 6 | 语音模块未接入 | AIUI XF-USB-MC 是标准 USB 声卡，后续可复用 `primitive-audio-driver-rbnx` |
+
+## 排障：三个踩过的坑
+
+### 1. 仓库改名后 build 失败（`CMakeCache.txt ... is different than`）
+
+`rbnx-build/` 和 `.venv/` 都会把**绝对路径**写进构建产物：CMake 缓存在
+`rbnx-build/codegen/ros2_idl/build/*/CMakeCache.txt` 里记着源码目录，`pip` 可执行
+文件的 shebang 指向 venv 解释器。仓库一旦改名或搬动，这些缓存全部失效，症状是：
+
+```
+CMake Error: The current CMakeCache.txt directory ... is different than the directory
+             /home/nvidia/<老仓库名>/rbnx-build/... where CMakeCache.txt was created
+CMake Error: The source directory "/home/nvidia/<老仓库名>/..." does not exist
+```
+
+或者更隐蔽的：
+
+```
+.venv/bin/pip: /home/nvidia/<老仓库名>/.venv/bin/python3: bad interpreter: No such file or directory
+```
+
+**处理**：删掉该包的 `rbnx-build/` 和 `.venv/` 再构建（两者都是可再生的，
+已在各包的 `.gitignore` 里）。批量排查：
+
+```bash
+for d in ~/primitive-*/rbnx-build/codegen/ros2_idl/build/*/CMakeCache.txt; do
+  stale=$(grep -m1 '^CMAKE_HOME_DIRECTORY:INTERNAL=' "$d" | cut -d= -f2)
+  [ -n "$stale" ] && [ ! -d "$stale" ] && echo "STALE $(echo $d | sed 's|/rbnx-build/.*||') -> $stale"
+done | sort -u
+```
+
+### 2. `rbnx build -f` 不会因为单个包失败而停下
+
+日志里会继续打印后面的包，只有末尾的 **Build summary** 才列出 `Failed`。看中间
+日志时留意 `✓ Package '...' build finished` 这一行是否出现，别只看最后一段。
+
+### 3. 首次构建需要能访问 GitHub
+
+提交版清单里的 `robot_description` 是 `url:`，`rbnx build` 会 clone 到
+`rbnx-boot/cache/`。代理不稳时会出现 `gnutls_handshake() failed`。离线机器用
+`robonix_manifest.local.yaml`（全 `path:`），并确保七个兄弟目录都存在。
 
 ## 许可
 
