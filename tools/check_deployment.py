@@ -50,6 +50,12 @@ LOCAL_ROLES = {"footprint", "bt_xml"}
 
 problems: list[str] = []
 notes: list[str] = []
+skipped: list[str] = []
+
+#: Set by --partial: a soma export whose provider is absent from this profile is
+#: reported instead of failed. Used for the control-only manifest, which drops
+#: the camera/mapping/navigation instances on purpose.
+partial_profile = False
 
 
 def fail(message: str) -> None:
@@ -58,6 +64,10 @@ def fail(message: str) -> None:
 
 def ok(message: str) -> None:
     notes.append(message)
+
+
+def skip(message: str) -> None:
+    skipped.append(message)
 
 
 def load_yaml(path: Path) -> dict:
@@ -207,6 +217,9 @@ def check_soma(manifest_path: Path, manifest: dict, instances: dict) -> None:
         for export in component.get("exports") or []:
             provider = export.get("provider_id")
             if provider not in instances:
+                if partial_profile:
+                    skip(f"soma {label} exports {provider!r} (not part of this profile)")
+                    continue
                 fail(f"soma.yaml: {label} exports provider {provider!r} that no manifest entry defines")
                 continue
             for capability in export.get("capabilities") or []:
@@ -284,13 +297,21 @@ def check_meshes(manifest_path: Path) -> None:
 
 
 def main() -> int:
+    global partial_profile
     parser = argparse.ArgumentParser(description="Static checks for this deployment.")
     parser.add_argument(
         "-m", "--manifest", type=Path,
         default=REPO / "robonix_manifest.local.yaml",
         help="manifest to check (default: the local one when present)",
     )
+    parser.add_argument(
+        "--partial", action="store_true",
+        help="a profile that intentionally leaves some providers out "
+             "(e.g. robonix_manifest.control.yaml); soma exports for the "
+             "missing ones are reported instead of failed",
+    )
     args = parser.parse_args()
+    partial_profile = args.partial
     manifest_path = args.manifest
     if not manifest_path.is_file():
         manifest_path = REPO / "robonix_manifest.yaml"
@@ -307,6 +328,8 @@ def main() -> int:
     print(f"checked {manifest_path.name}")
     for note in notes:
         print(f"  ok   {note}")
+    for note in skipped:
+        print(f"  skip {note}")
     for problem in problems:
         print(f"  FAIL {problem}", file=sys.stderr)
     print(f"{len(notes)} checks passed, {len(problems)} failed")

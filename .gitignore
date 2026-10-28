@@ -6,3 +6,4 @@ logs/
 robonix_manifest.local.yaml
 __pycache__/
 *.pyc
+robonix_manifest.control.yaml

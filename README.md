@@ -30,6 +30,42 @@ robot-jaka-lumi_with_tg9801_gripper/
 | `mapping` | **复用** `service-map-rbnx` | RTAB-Map RGB-D 建图，输出占据栅格与 `map→odom` |
 | `navigation` | **复用** `service-navigation-rbnx` | Nav2，绑 map + odom，输出 `/cmd_vel` |
 
+## 部署拓扑（先读这一节）
+
+Lumi 的两台 RGB-D 相机是 **USB 设备，挂在机器人内部主控上**，不是接在开发机上。
+原语没有跨机访问 USB 的手段，所以能跑在哪台机器上是不一样的：
+
+| 实例 | 开发机（WiFi 接入） | 内部主控（相机所在机） | 依据 |
+|---|---|---|---|
+| `lumi_chassis` | ✅ | ✅ | TCP `192.168.10.10:31001` |
+| `lumi_body` | ✅ | ✅ | HTTP `192.168.10.90:5000` |
+| `jaka_arm` | ✅ | ✅ | jkrc `192.168.10.90` |
+| `robot_description`（TF） | ✅ | ✅ | 只依赖 `/joint_states` |
+| `head_camera` | ❌ USB 不在本机 | ✅ | 相机物理直连 |
+| `mapping` | ❌ | ✅ | 依赖相机 rgb+depth |
+| `navigation` | ❌ | ✅ | 需要 `service/map`（mapping 提供） |
+
+三种拓扑，按你的目标选：
+
+1. **整套装到内部主控**（要建图+Nav2 时的唯一完整方案）。把本仓库和六个包复制/克隆
+   到那台机器，装 `ros-humble-rtabmap-ros`、`ros-humble-nav2-bringup` 和 Robonix，
+   然后 `bash build.sh && bash start.sh`。
+2. **分机混合**：开发机跑控制三件套 + `robot_description`，内部主控跑
+   `head_camera` + `mapping`，两边连同一个 Atlas（`system.atlas.listen: 0.0.0.0:50051`）
+   与同一个 Zenoh router（`ROBONIX_ZENOH_ROUTER=tcp://<开发机IP>:7447`）。
+   跨机 DDS + 双份 Robonix 安装，运维成本最高。
+3. **开发机只控**（本机已就绪）：用 `robonix_manifest.control.yaml`，只有 4 个实例
+   （`robot_description` / `jaka_arm` / `lumi_chassis` / `lumi_body`）。
+   这条能验收**整套 TF 设计**——`lumi_body` 发 `l_1..l_4`，`robot_state_publisher`
+   就能算出 `base_link → … → Camera3_Link`，即使没有图像。
+
+   ```bash
+   python3 tools/check_deployment.py -m robonix_manifest.control.yaml --partial
+   bash start.sh robonix_manifest.control.yaml
+   ```
+
+   （该清单是本机文件、已 gitignore；按上面 4 个实例复现即可。）
+
 ## 硬件地址一览
 
 | 部件 | 接口 |
