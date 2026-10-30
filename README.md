@@ -3,6 +3,8 @@
 Robonix deployment repository for the JAKA Lumi (12-DOF mobile manipulator with
 a TG-9801 gripper).
 
+![JAKA Lumi mobile manipulator with a TG-9801 gripper](assets/robot.jpg)
+
 ```text
 robot-jaka-lumi_with_tg9801_gripper/
 ├── robonix_manifest.yaml          committed form: every package referenced by url
@@ -12,6 +14,7 @@ robot-jaka-lumi_with_tg9801_gripper/
 ├── urdf/meshes/*.STL              26 meshes, 17 MB
 ├── config/rtabmap_params.yaml     RGB-D mapping parameters
 ├── config/nav2_params.yaml        Nav2 parameters (the no-scan trade-off is documented in the header)
+├── assets/robot.jpg               robot listing preview for the Robonix package catalog (not a build input)
 ├── tools/prepare_urdf.py          generates the URDF above from the vendor model (re-runnable)
 ├── tools/check_deployment.py      static self-check: manifest / soma / URDF / params / env
 ├── build.sh / start.sh            build and start entry points
