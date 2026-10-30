@@ -73,9 +73,12 @@ primitive:
       # The arm sits on the waist, so Cartesian poses belong to the arm base
       # frame, which is the parent of link_a1 in the deployment URDF.
       base_frame: link_2
-      # Exit homing: open the gripper, then park at the all-zero reference pose
+      # Exit homing: open the gripper, then park in the factory packing pose
       # before power-off. Only honoured while motion_enabled is true.
-      shutdown_home_joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      # J = [0, 120, -120, 0, -90, 0] deg; TCP (-22.1, -6.0, 292.0) mm,
+      # rpy (0, 90, 0) deg. The vendor packs the robot in this folded pose;
+      # read back from the controller on 2026-10-29.
+      shutdown_home_joints: [0.0, 2.0943951, -2.0943951, 0.0, -1.5707963, 0.0]
 
   - name: head_camera
     url: https://github.com/syswonder/primitive-orbbec-camera-rbnx
