@@ -101,7 +101,6 @@ primitive:
       sentinel_timeout_s: 30.0
 
   - name: lumi_chassis
-    # TODO: publish this repository before switching the deployment to URLs.
     url: https://github.com/syswonder/primitive-jaka-lumi-chassis-rbnx
     branch: main
     config:
@@ -119,7 +118,6 @@ primitive:
       uuid: lumi
 
   - name: lumi_body
-    # TODO: publish this repository before switching the deployment to URLs.
     url: https://github.com/syswonder/primitive-jaka-lumi-body-rbnx
     branch: main
     config:
