@@ -108,7 +108,9 @@ robot:
           components:
             - id: gripper
               type: parallel_jaw_gripper
-              urdf_link: link_at
+              # The flange + gripper body live under link_at; gripper_base is its
+              # seat plane (15.5 mm out), gripper_finger_l/_r are the jaws.
+              urdf_link: gripper_base
               state:
                 joint_name: gripper_joint
                 # TG-9801 full stroke; re-measure during acceptance.

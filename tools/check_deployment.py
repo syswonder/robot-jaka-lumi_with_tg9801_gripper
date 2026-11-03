@@ -34,6 +34,10 @@ REPO = Path(__file__).resolve().parent.parent
 BODY_JOINTS = {"l_1", "l_2", "l_3", "l_4"}
 #: Joints the reused arm primitive publishes (jaka_arm/driver.py JOINT_NAMES).
 ARM_JOINTS = {f"joint_{index}" for index in range(1, 7)}
+#: TG-9801 jaw joints: the provider publishes the single `gripper_joint`
+#: (opening in m); the right jaw follows it through <mimic>.
+GRIPPER_JOINTS = {"gripper_joint", "gripper_joint_r", "gripper_disc_joint",
+                  "gripper_rod_joint_l", "gripper_rod_joint_r"}
 
 #: Tokens the navigation wrapper can resolve, mapped to the provider role that
 #: must be bound for them to resolve.
@@ -202,7 +206,7 @@ def check_soma(manifest_path: Path, manifest: dict, instances: dict) -> None:
         fail(f"soma.yaml: footprint.base_frame {footprint.get('base_frame')!r} is not a URDF link")
 
     moved = {j for j, joint in joints.items() if joint.get("type") != "fixed"}
-    expected = BODY_JOINTS | ARM_JOINTS
+    expected = BODY_JOINTS | ARM_JOINTS | GRIPPER_JOINTS
     if moved != expected:
         fail(f"URDF movable joints {sorted(moved)} != providers expect {sorted(expected)}")
 

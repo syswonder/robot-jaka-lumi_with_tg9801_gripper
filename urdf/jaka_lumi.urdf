@@ -422,6 +422,231 @@
     <child link="link_at" />
     <axis xyz="0 0 0" />
   </joint>
+  <!-- ===== TG-9801 gripper on the adapter flange (added 2026-11-03) =====
+       Chain: link_a6 -> l_at -> link_at -> gripper_flange -> gripper_base -> jaws.
+
+       Frame origins along the tool axis, measured from link_at's disc face
+       (link_a6 z = 36 mm):
+         gripper_flange   0      flange back face, flush on the link_at disc
+         gripper_base  8.5 mm    flange front face is 15.5 mm out; the gripper is
+                                 seated 7 mm deeper than a bare face-to-face
+                                 contact, so the flange's Ø50 spigot (10.5 mm
+                                 long) enters the gripper's cavity 7 of 10.5 mm
+                                 and the four holes on both faces line up.
+                                 The Ø40 / Ø41 features are clearance only.
+         jaws       73.05 mm     above gripper_base, inner faces touching at q = 0
+
+       MOUNTING IS NOT REALIZABLE AS MODELLED. The flange v4 wants 4xM6 on a Ø50
+       circle, but the Lumi wrist ends in a Ø61 ring whose centre carries a
+       Ø31.6x2 disc (sized like the Mini-2 Ø31.5 bolt circle; the vendor export
+       does not draw the holes) and the wrist is only Ø62.4 across. The gripper
+       itself is 160 mm wide with a 98 mm stroke, i.e. much larger than this
+       arm's end. The TG-9801 has a detachable base plate, so the real fix is a
+       Ø31.5 / 4xM4 base plate (or an adapter plate) instead of this v4 flange.
+       This subtree is kept as the geometric reference only, NOT as an assembly
+       that can be bolted on the robot.
+
+       Jaw travel: 0..49 mm per finger, so the opening is 2*q. The jaka_arm
+       provider publishes a single `gripper_joint` whose value is the OPENING in
+       metres (0..0.098), i.e. twice this joint's value; robot_state_publisher
+       clamps anything above 49 mm, which keeps both extremes (closed and fully
+       open) correct and saturates the middle of the stroke. -->
+  <link name="gripper_flange">
+    <inertial>
+      <origin xyz="0 0 0.00775" rpy="0 0 0" />
+      <mass value="0.071" />
+      <inertia ixx="2.4e-05" ixy="0" ixz="0" iyy="2.4e-05" iyz="0" izz="3.8e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_flange_v4.stl" />
+      </geometry>
+      <material name="">
+        <color rgba="0.92 0.60 0.15 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_flange_v4.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="l_gripper_flange" type="fixed">
+    <!-- -90 deg about the tool axis: how the flange + gripper pair is clocked
+         when bolted on the real wrist. Jaws travel along Y in the link_at
+         frame. (An earlier attempt clocked +90 deg, which is the wrong
+         direction; the pair needed another 180 deg from there, i.e. this.) -->
+    <origin xyz="0 0 0" rpy="0 0 -1.570796" />
+    <parent link="link_at" />
+    <child link="gripper_flange" />
+  </joint>
+  <link name="gripper_base">
+    <inertial>
+      <origin xyz="0 0.00365 0.03253" rpy="0 0 0" />
+      <mass value="0.357" />
+      <inertia ixx="3.4e-04" ixy="0" ixz="0" iyy="6.3e-04" iyz="0" izz="6.5e-04" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_body.stl" />
+      </geometry>
+      <material name="">
+        <color rgba="0.25 0.45 0.72 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_body.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="l_gripper_base" type="fixed">
+    <!-- 15.5 mm to the flange front face minus the 7 mm seating of the gripper -->
+    <origin xyz="0 0 0.0085" rpy="0 0 0" />
+    <parent link="gripper_flange" />
+    <child link="gripper_base" />
+  </joint>
+  <link name="gripper_disc">
+    <inertial>
+      <origin xyz="0 0 0.0615" rpy="0 0 0" />
+      <mass value="0.22" />
+      <inertia ixx="2.6e-04" ixy="0" ixz="0" iyy="2.6e-04" iyz="0" izz="5.1e-04" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_disc.stl" /></geometry>
+      <material name=""><color rgba="0.42 0.48 0.55 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_disc.stl" /></geometry>
+    </collision>
+  </link>
+  <joint name="gripper_disc_joint" type="revolute">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="gripper_base" />
+    <child link="gripper_disc" />
+    <axis xyz="0 0 1" />
+    <!-- +-150 deg: the crossed rod pairing needs about 110 deg of disc travel
+         for the full 98 mm stroke -->
+    <limit lower="-2.618" upper="2.618" effort="30" velocity="2" />
+  </joint>
+  <link name="gripper_finger_l">
+    <inertial>
+      <origin xyz="-0.01425 0 0.03585" rpy="0 0 0" />
+      <mass value="0.0746" />
+      <inertia ixx="3.6e-05" ixy="0" ixz="0" iyy="3.0e-05" iyz="0" izz="1.0e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_finger_l.stl" />
+      </geometry>
+      <material name="">
+        <color rgba="0.35 0.55 0.80 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_finger_l.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="gripper_joint" type="prismatic">
+    <origin xyz="0 0 0.07305" rpy="0 0 0" />
+    <parent link="gripper_base" />
+    <child link="gripper_finger_l" />
+    <axis xyz="-1 0 0" />
+    <limit lower="0" upper="0.049" effort="30" velocity="0.1" />
+  </joint>
+  <link name="gripper_finger_r">
+    <inertial>
+      <origin xyz="0.01425 0 0.03585" rpy="0 0 0" />
+      <mass value="0.0746" />
+      <inertia ixx="3.6e-05" ixy="0" ixz="0" iyy="3.0e-05" iyz="0" izz="1.0e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_finger_r.stl" />
+      </geometry>
+      <material name="">
+        <color rgba="0.35 0.55 0.80 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/gripper_finger_r.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <!-- Each jaw also drives its connecting rod: the rod hinges on the jaw (the
+       shoulder screw at the jaw's outer end) and its far end carries the crank
+       pin on the drive wheel. Crank radius 30 mm, rod length 40.01 mm, so the
+       49 mm jaw travel is a slider-crank, not a rigid attach: a joint angle of
+       0 here corresponds to a fully CLOSED gripper (the mesh is pre-rotated by
+       -phi_closed). A consumer that only reads the URDF sees the closed pose;
+       tools/urdf_viewer solves the crank angle from the jaw position. -->
+  <link name="gripper_rod_l">
+    <inertial>
+      <origin xyz="-0.00043 -0.01999 -0.00195" rpy="0 0 0" />
+      <mass value="0.0053" />
+      <inertia ixx="1.118e-06" ixy="0" ixz="0" iyy="6.989e-08" iyz="0" izz="1.151e-06" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_rod_l.stl" /></geometry>
+      <material name=""><color rgba="0.55 0.62 0.70 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_rod_l.stl" /></geometry>
+    </collision>
+  </link>
+  <joint name="gripper_rod_joint_l" type="revolute">
+    <origin xyz="-0.016560 0.025020 0" rpy="0 0 0" />
+    <parent link="gripper_disc" />
+    <child link="gripper_rod_l" />
+    <axis xyz="0 0 1" />
+    <limit lower="-3.1416" upper="3.1416" effort="10" velocity="1" />
+  </joint>
+  <link name="gripper_rod_r">
+    <inertial>
+      <origin xyz="-0.00043 -0.01999 -0.00195" rpy="0 0 0" />
+      <mass value="0.0053" />
+      <inertia ixx="1.118e-06" ixy="0" ixz="0" iyy="6.989e-08" iyz="0" izz="1.151e-06" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_rod_r.stl" /></geometry>
+      <material name=""><color rgba="0.55 0.62 0.70 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/gripper_rod_r.stl" /></geometry>
+    </collision>
+  </link>
+  <joint name="gripper_rod_joint_r" type="revolute">
+    <origin xyz="0.016560 -0.025020 0" rpy="0 0 0" />
+    <parent link="gripper_disc" />
+    <child link="gripper_rod_r" />
+    <axis xyz="0 0 1" />
+    <limit lower="-3.1416" upper="3.1416" effort="10" velocity="1" />
+  </joint>
+  <joint name="gripper_joint_r" type="prismatic">
+    <origin xyz="0 0 0.07305" rpy="0 0 0" />
+    <parent link="gripper_base" />
+    <child link="gripper_finger_r" />
+    <axis xyz="1 0 0" />
+    <limit lower="0" upper="0.049" effort="30" velocity="0.1" />
+    <mimic joint="gripper_joint" multiplier="1" offset="0" />
+  </joint>
   <link name="Camera2_Link">
     <inertial>
       <origin xyz="-0.000143110787554801 -0.013057264464305 2.63392011492503E-05" rpy="0 0 0" />
