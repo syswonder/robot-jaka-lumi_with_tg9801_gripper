@@ -18,7 +18,6 @@ robot-jaka-lumi_with_tg9801_gripper/
 ├── tools/prepare_urdf.py          generates the URDF above from the vendor model (re-runnable)
 ├── tools/check_deployment.py      static self-check: manifest / soma / URDF / params / env
 ├── build.sh / start.sh            build and start entry points
-├── .vlmkey.example                template for the VLM credentials and the head camera serial
 └── README.md
 ```
 
@@ -107,7 +106,11 @@ Three topologies; pick one according to the goal:
    `libjakaAPI.so`. Place them in
    `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx/jaka_arm/jaka_sdk/aarch64-linux-gnu/`.
    Without them the arm package's `build.sh` fails fast and prints the path.
-4. **`.vlmkey`**: `cp .vlmkey.example .vlmkey` and fill in the VLM credentials
+4. **credentials**: the committed manifest keeps them as environment
+   placeholders — `${VLM_BASE_URL}`, `${VLM_API_KEY}`, `${VLM_MODEL}`,
+   `${LUMI_HEAD_CAMERA_SN}`, `${JAKA_WEB_PASSWORD}`. Export those before
+   `start.sh`, or put literal values in a gitignored
+   `robonix_manifest.local.yaml` (that is what this machine's copy does)
    and the **head camera serial number** (two identical cameras must be pinned by
    serial, otherwise the torso camera can be picked as the mapping camera).
 5. **The local manifest is fully offline**: `robonix_manifest.local.yaml` turns

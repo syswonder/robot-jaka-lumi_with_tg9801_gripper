@@ -1,8 +1,6 @@
 rbnx-boot/
 logs/
 .venv/
-.vlmkey*
-!.vlmkey.example
 robonix_manifest.local.yaml
 __pycache__/
 *.pyc

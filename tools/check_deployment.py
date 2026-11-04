@@ -8,6 +8,7 @@ reviewer misses and that only surface at `rbnx boot` time:
   * a `path:` package or a `manifest:` file that does not exist,
   * a `params_file` that is not there,
   * a ``${VAR}`` that boot would expand to an empty string,
+  * a VLM credential or camera serial left empty in the booted manifest,
   * a soma component pointing at a URDF link/joint that was renamed away,
   * a soma `provider_id` that is not a manifest instance,
   * a sana capability that the referenced package does not declare,
@@ -151,22 +152,37 @@ def _read(path: Path) -> str:
         return ""
 
 
-def check_required_env(manifest_path: Path, manifest: dict, instances: dict) -> None:
-    """Every ${VAR} must be provided by `env:`, .vlmkey or the shell."""
+def check_secrets(manifest_path: Path, manifest: dict, instances: dict) -> None:
+    """Site credentials: ${ENV} placeholders in the committed manifest, literals
+    in the gitignored local manifest that actually boots."""
     text = _read(manifest_path)
-    declared = set((manifest.get("env") or {}).keys())
-    secret_file = _read(REPO / ".vlmkey")
-    for name in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", text):
-        if name in declared or name == "PWD":
-            continue
-        if re.search(rf"\b{name}=", secret_file):
-            continue
-        if name.startswith("VLM_") or name.startswith("LUMI_"):
-            fail(
-                f"${{{name}}} is not in manifest env and not exported by .vlmkey "
-                f"(copy .vlmkey.example and fill it in)"
-            )
-    ok("env: manifest variables resolve (or come from .vlmkey)")
+    placeholders = sorted({name for name in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", text)
+                           if name.startswith(("VLM_", "LUMI_", "JAKA_"))})
+    if manifest_path.name == "robonix_manifest.yaml":
+        if placeholders:
+            skipped.append("secrets from the environment: " + ", ".join(placeholders))
+        else:
+            skipped.append("secrets: template manifest, fill a copy for your site")
+        return
+
+    vlm = ((manifest.get("system") or {}).get("pilot") or {}).get("vlm") or {}
+    empty = [f"system.pilot.vlm.{key}" for key in ("upstream", "api_key", "model")
+             if not str(vlm.get(key) or "").strip()]
+    camera = (instances.get("head_camera") or {}).get("config") or {}
+    if not str(camera.get("serial_number") or "").strip():
+        empty.append("head_camera.config.serial_number")
+    arm = (instances.get("jaka_arm") or {}).get("config") or {}
+    if not str(arm.get("web_password") or "").strip():
+        empty.append("jaka_arm.config.web_password")
+
+    if empty:
+        fail(f"{', '.join(empty)} empty in {manifest_path.name}; fill them in")
+        return
+    if placeholders:
+        skipped.append("secrets: ${...} left in the booted manifest; they resolve "
+                       "from the environment")
+        return
+    ok("secrets: VLM credentials, camera serial and App password are set")
 
 
 def check_soma(manifest_path: Path, manifest: dict, instances: dict) -> None:
@@ -324,7 +340,7 @@ def main() -> int:
     manifest_path = manifest_path.resolve()
 
     manifest, instances = check_manifest(manifest_path)
-    check_required_env(manifest_path, manifest, instances)
+    check_secrets(manifest_path, manifest, instances)
     check_soma(manifest_path, manifest, instances)
     check_nav2_tokens(manifest_path, instances)
     check_meshes(manifest_path)

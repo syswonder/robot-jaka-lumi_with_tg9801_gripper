@@ -21,12 +21,9 @@ MANIFEST="${1:-$DEFAULT_MANIFEST}"
 # This script only owns what the manifest cannot express: the rmw_zenohd
 # lifecycle and the gitignored secrets below.
 
-# VLM credentials for Pilot and the head camera serial. rbnx fails with a
-# clear message if the VLM vars are still unset at boot.
-if [[ -f "$DEPLOY_DIR/.vlmkey" ]]; then
-    # shellcheck disable=SC1091
-    source "$DEPLOY_DIR/.vlmkey"
-fi
+# VLM credentials and the head camera serial are manifest fields now
+# (`system.pilot.vlm`, `head_camera.config.serial_number`): the committed
+# manifest leaves them empty, the gitignored local manifest fills them in.
 
 cd "$DEPLOY_DIR"
 mkdir -p rbnx-boot/logs
