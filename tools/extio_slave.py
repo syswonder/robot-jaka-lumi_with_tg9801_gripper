@@ -9,13 +9,16 @@ SDK 与 legacy 协议都没有这两个开关，只有 Coboπ 网页有，所以
 
     POST /webapp/api/user/login          {username, password, ip, ...}   → token
     POST /webapp/api/user/logout         {ip, robot_index}               (+ token)
-    POST /webapp/api/grpcRequest/        {reqtype: MSGID_..., ip, ...}
     POST /webapp/api/grpcRequest/handleRpc  {rpcKey: CaptureCtrl|TransCtrl, ...} (+ token)
+    POST /webapp/api/grpcRequest/        {reqtype: MSGID_SETEXTIOMODE,
+                                          extio_mode_req: {submod, tarmode}} (+ token)
 
 注意：
   · 请求体里必须带 `ip`，否则网关拿 `undefined` 解析后端地址，返回
     `14 UNAVAILABLE: Name resolution failed for target dns:undefined:50053`。
-  · `handleRpc` 必须带 `Authorization: <token>`，否则 `16 UNAUTHENTICATED`。
+  · `MSGID_SETEXTIOMODE` 必须带 `Authorization: <token>`，且模式字段是
+    **`tarmode`**（1=运行 0=停止）；不带 token 或写成 `intid`/`mode` 都会
+    返回 errcode 0 却什么都不做——这是本仓库踩过最久的坑。
   · 控制器对 App 会话是全局单会话：用完要 logout，否则下一次登录会得到
     `917508 Login failed:other app account already login`。
   · 从站启停只在控制源为「本地/App」时被允许（远程时报 917522 Permission denied）。
@@ -109,18 +112,17 @@ def status(ip: str, submodule: int) -> int:
     return 0 if code == 0 else 1
 
 
-def set_mode(ip: str, token: str, submodule: int, start: bool) -> int:
-    code, msg = rpc(ip, "MSGID_SETEXTIOMODE", intid=submodule)
-    action = "启动" if start else "停止"
-    if code == 0:
-        print(f"{action}从站 {submodule}: API 返回成功")
-        return 0
-    if code == 917522:
-        print(f"{action}从站 {submodule}: 权限不足（917522）。"
-              "先把控制源切到本地（ctrl local）再试。")
-    else:
-        print(f"{action}从站 {submodule} 失败: errcode={code} {msg}")
-    return 1
+def set_mode(ip: str, token: str, submodule: int, run: bool) -> tuple[int, str]:
+    """启停从站。必须带 token 且用 `tarmode` 字段，否则控制器静默忽略。"""
+    reply = _post(ip, "/grpcRequest/", {
+        "reqtype": "MSGID_SETEXTIOMODE",
+        "robot_index": 0,
+        "ip": ip,
+        "controlVersion": "3.3.15_minicab",
+        "extio_mode_req": {"submod": int(submodule), "tarmode": 1 if run else 0},
+    }, token)
+    data = reply.get("data", {})
+    return int(data.get("errcode", -1)), str(data.get("errormsg") or "")
 
 
 def set_ctrl(ip: str, token: str, to_remote: bool) -> int:
@@ -144,7 +146,7 @@ def main() -> int:
                     help="ctrl 的目标控制源")
     ap.add_argument("--ip", default=DEFAULT_IP)
     ap.add_argument("--submodule", type=int, default=DEFAULT_SUBMODULE)
-    ap.add_argument("--user", default=os.environ.get("JAKA_WEB_USER", "jaka_sdk_app"))
+    ap.add_argument("--user", default=os.environ.get("JAKA_WEB_USER", "jakazu7admin"))
     ap.add_argument("--password", default=os.environ.get("JAKA_WEB_PASSWORD", ""))
     args = ap.parse_args()
 
@@ -162,7 +164,18 @@ def main() -> int:
     try:
         if args.action == "ctrl":
             return set_ctrl(args.ip, token, to_remote=args.target == "remote")
-        return set_mode(args.ip, token, args.submodule, start=args.action == "start")
+        run = args.action == "start"
+        code, msg = set_mode(args.ip, token, args.submodule, run)
+        label = "启动" if run else "停止"
+        if code == 0:
+            print(f"{label}从站 {args.submodule}: 成功")
+            return 0
+        if code == 917522:
+            print(f"{label}从站 {args.submodule}: 权限不足（917522）。"
+                  "先把控制源切到本地（ctrl local）再试。")
+        else:
+            print(f"{label}从站 {args.submodule} 失败: errcode={code} {msg}")
+        return 1
     finally:
         logout(args.ip, token)
 

@@ -47,6 +47,7 @@ class Chrome:
         self.ws = None
         self._id = 0
         self.network: list[dict] = []
+        self.websockets: list[dict] = []
 
     # ---------- lifecycle ----------
     def __enter__(self):
@@ -98,6 +99,8 @@ class Chrome:
                 req = raw["params"]["request"]
                 self.network.append({"url": req["url"], "method": req["method"],
                                      "postData": req.get("postData")})
+            elif raw.get("method", "").startswith("Network.webSocket"):
+                self.websockets.append({"event": raw["method"], **raw.get("params", {})})
             if raw.get("id") == msg_id:
                 if "error" in raw:
                     raise RuntimeError(f"{method}: {raw['error']}")
