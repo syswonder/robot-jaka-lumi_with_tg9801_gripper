@@ -28,7 +28,7 @@ robot-jaka-lumi_with_tg9801_gripper/
 |---|---|---|
 | `lumi_chassis` | **new** `primitive-jaka-lumi-chassis-rbnx` | base: odom + move + `/cmd_vel`, vendor TCP JSON :31001 |
 | `lumi_body` | **new** `primitive-jaka-lumi-body-rbnx` | lift/waist/head joints → `/joint_states`, vendor HTTP :5000 |
-| `jaka_arm` | **reused** `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx` | 6-axis arm + TG-9801 (same Mini 2, same gripper) |
+| `jaka_arm` | **reused** `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx`, branch **`lumi`** | 6-axis arm + TG-9801 (same Mini 2, same gripper); `lumi` carries the extended-IO gripper and the standard gripper contracts |
 | `head_camera` | **reused** `primitive-orbbec-camera-rbnx` | head Gemini 2L (`gemini2L.launch.py`) |
 | `robot_description` | **reused** `primitive-robot-description-rbnx` | reads the URDF from Soma, runs robot_state_publisher for TF |
 | `mapping` | **reused** `service-map-rbnx` | RTAB-Map RGB-D mapping, occupancy grid and `map→odom` |

@@ -60,7 +60,7 @@ primitive:
 
   - name: jaka_arm
     url: https://github.com/syswonder/primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx
-    branch: main
+    branch: lumi
     config:
       # Lumi's cabinet address, NOT the mini's 10.5.5.100.
       ip: 192.168.10.90
