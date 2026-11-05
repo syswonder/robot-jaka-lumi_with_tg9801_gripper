@@ -108,7 +108,8 @@ Three topologies; pick one according to the goal:
    Without them the arm package's `build.sh` fails fast and prints the path.
 4. **credentials**: the committed manifest keeps them as environment
    placeholders — `${VLM_BASE_URL}`, `${VLM_API_KEY}`, `${VLM_MODEL}`,
-   `${LUMI_HEAD_CAMERA_SN}`, `${JAKA_WEB_PASSWORD}`. Export those before
+   `${LUMI_HEAD_CAMERA_SN}`, `${JAKA_WEB_PASSWORD}`, `${JAKA_SDK_PASSWORD}`.
+   Export those before
    `start.sh`, or put literal values in a gitignored
    `robonix_manifest.local.yaml` (that is what this machine's copy does)
    and the **head camera serial number** (two identical cameras must be pinned by

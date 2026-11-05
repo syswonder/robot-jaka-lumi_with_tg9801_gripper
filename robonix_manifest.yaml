@@ -70,6 +70,11 @@ primitive:
       # Fill in the password for your site; it is never committed.
       web_user: jakazu7admin
       web_password: ${JAKA_WEB_PASSWORD}   # App account password
+      # SDK account for the gRPC session. The ext-IO calls abort on a legacy
+      # session, so the provider has no built-in password default any more:
+      # leave this empty and the gripper is silently disabled.
+      sdk_user: jaka_sdk
+      sdk_password: ${JAKA_SDK_PASSWORD}   # SDK account password
       motion_enabled: false      # staged acceptance, see README
       joint_speed_rad_s: 0.3
       linear_speed_mm_s: 30.0
