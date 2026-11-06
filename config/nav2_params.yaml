@@ -5,17 +5,17 @@
 #
 #   1. AMCL is removed. Localization comes from Mapping (RTAB-Map), which owns
 #      map -> odom; a second laser-based localizer would fight it.
-#   2. Every scan-topic token and its obstacle_layer is removed. The base's
-#      240 deg lidar is closed inside the chassis firmware, so this deployment
-#      has no scan provider. Leaving the token in would make Driver(CMD_INIT)
-#      fail: the wrapper refuses to start with an unresolved ROBONIX token, and
-#      it scans the whole file, comments included.
+#   2. The obstacle layer is fed from the MID-360 cloud bound as scan_cloud,
+#      not from a 2-D scan: the base's own 240 deg lidar is closed inside the
+#      chassis firmware and no provider publishes LaserScan. An unresolved
+#      ROBONIX token makes Driver(CMD_INIT) fail — the wrapper scans the whole
+#      file, comments included — so the token below only resolves while
+#      navigation's provider_ids binds scan_cloud.
 #
-# Consequence: the costmaps are static-map + inflation only. Nav2 plans around
-# walls it already knows about and cannot see a new obstacle. The chassis
-# firmware still stops on contact, and `lumi_chassis` exposes the vendor's own
-# obstacle-avoiding navigation through chassis/move. Adding a depth -> point
-# cloud -> LaserScan provider is the documented V2 path (README, Known limits).
+# Consequence: the costmaps see live obstacles up to 5 m, marked and cleared
+# by the cloud. The chassis firmware still stops on contact, and
+# `lumi_chassis` exposes the vendor's own obstacle-avoiding navigation
+# through chassis/move.
 #
 # Remaining tokens are resolved by the wrapper from the Atlas providers:
 #   __ROBONIX_MAP_TOPIC__  -> the mapping provider's occupancy grid
@@ -177,8 +177,28 @@ local_costmap:
       resolution: 0.05
       footprint: "__ROBONIX_FOOTPRINT__"
       footprint_padding: 0.05
-      # No obstacle_layer: no scan source in this deployment (see header).
-      plugins: ["inflation_layer"]
+      # Live obstacles from the MID-360 cloud: Nav2's obstacle layer consumes
+      # PointCloud2 directly, so no pointcloud_to_laserscan hop is needed.
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan_cloud
+        scan_cloud:
+          topic: "__ROBONIX_SCAN_CLOUD_TOPIC__"
+          data_type: "PointCloud2"
+          clearing: true
+          marking: true
+          # base_link sits on the wheel axle, 0.29 m above the floor (wheel
+          # centres at z -0.2071, wheel radius 0.0845), and the lidar is 0.19 m
+          # above base_link. The floor therefore projects to z about -0.29 and
+          # a threshold of 0.05 would hide everything shorter than 0.34 m.
+          min_obstacle_height: -0.25
+          max_obstacle_height: 1.7
+          obstacle_min_range: 0.15
+          obstacle_max_range: 5.0
+          raytrace_min_range: 0.15
+          raytrace_max_range: 5.5
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         enabled: true
@@ -199,13 +219,27 @@ global_costmap:
       resolution: 0.05
       rolling_window: false
       track_unknown_space: true
-      # No obstacle_layer: see the header comment.
-      plugins: ["static_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
         enabled: true
         map_topic: "__ROBONIX_MAP_TOPIC__"
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan_cloud
+        scan_cloud:
+          topic: "__ROBONIX_SCAN_CLOUD_TOPIC__"
+          data_type: "PointCloud2"
+          clearing: true
+          marking: true
+          min_obstacle_height: -0.25
+          max_obstacle_height: 1.7
+          obstacle_min_range: 0.15
+          obstacle_max_range: 5.0
+          raytrace_min_range: 0.15
+          raytrace_max_range: 5.5
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         enabled: true
