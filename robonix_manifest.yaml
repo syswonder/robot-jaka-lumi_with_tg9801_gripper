@@ -51,6 +51,31 @@ system:
     listen: 0.0.0.0:50093
   liaison:
     listen: 0.0.0.0:50081
+  # Scene: the semantic + geometric live map behind Pilot's environment
+  # questions. It is not a builtin binary, so it is resolved from the
+  # robonix source tree (`system/scene`) registered by `rbnx setup`, and it
+  # runs natively on the host because that is where the JetPack CUDA stack
+  # and ROS 2 are.
+  scene:
+    manifest: package_manifest.jetson-native.yaml
+    config:
+      # Two Gemini 2L units are registered; pin the RGB-D streams, the
+      # intrinsics and the frame to one physical camera so they cannot mix.
+      camera_provider_id: waist_camera
+      camera_frame: waist_camera_color_optical_frame
+      base_frame: base_link
+      web_port: 50107
+      # Native has no rerun-sdk and no browser bundle, so the 3D/2D map pages
+      # stay off. The camera, maps and logs pages are served either way.
+      web_viewer: "off"
+      pose_max_age_s: 2.0
+      perception:
+        profile: lite
+      # The Orbbec primitive publishes camera_info, which Scene does not read:
+      # it consumes primitive/camera/intrinsics and waits (never guesses K)
+      # when that contract is absent. The per-unit fallback lives in the
+      # gitignored local manifest; the real fix is to declare the intrinsics
+      # contract on the camera primitive and drop the fallback.
 
 primitive:
   - name: robot_description
@@ -75,7 +100,7 @@ primitive:
       # leave this empty and the gripper is silently disabled.
       sdk_user: jaka_sdk
       sdk_password: ${JAKA_SDK_PASSWORD}   # SDK account password
-      motion_enabled: false      # staged acceptance, see README
+      motion_enabled: true
       joint_speed_rad_s: 0.3
       linear_speed_mm_s: 30.0
       gripper_force: 30
@@ -111,13 +136,34 @@ primitive:
       depth_fps: 30
       sentinel_timeout_s: 30.0
 
+  # The second Gemini 2L sits on the base panel. It is not a mapping input any
+  # more (mapping runs on the MID-360), but both cameras stay in the stack for
+  # future scene / calibration work.
+  - name: waist_camera
+    url: https://github.com/syswonder/primitive-orbbec-camera-rbnx
+    branch: main
+    config:
+      launch_file: gemini2L.launch.py
+      camera_name: waist_camera
+      # Pinned by serial for the same reason as the head unit.
+      serial_number: ${LUMI_WAIST_CAMERA_SN}
+      depth_registration: true
+      color_width: 1280
+      color_height: 720
+      color_fps: 30
+      depth_width: 640
+      depth_height: 400
+      depth_fps: 30
+      sentinel_timeout_s: 30.0
+
   - name: lumi_chassis
     url: https://github.com/syswonder/primitive-jaka-lumi-chassis-rbnx
     branch: main
     config:
       host: 192.168.10.10
       port: 31001
-      motion_enabled: false
+      # Drives the base: teleop and Nav2 both need it.
+      motion_enabled: true
       odom_frame: odom
       base_frame: base_link
       publish_tf: true
@@ -133,7 +179,7 @@ primitive:
     branch: main
     config:
       base_url: http://192.168.10.90:5000
-      motion_enabled: false
+      motion_enabled: true
       auto_enable: true
       state_publish_hz: 10.0
       joint_states_topic: /joint_states
@@ -142,25 +188,73 @@ primitive:
       default_vel_pct: 10
       default_acc_pct: 10
 
+  # Livox MID-360. The lidar keeps whatever address it was flashed with and
+  # that differs per batch — Livox's default is 192.168.1.1XX, XX being the
+  # last two digits of the S/N (this unit ...0305 answers on .105). Read the
+  # real value off with Livox Viewer 2 or the SDK's `livox_lidar_info_get` and
+  # export it; never commit one machine's address here.
+  # boot order matters: mid360_imu defers until the lidar's /livox/imu is live.
+  - name: mid360_lidar
+    url: https://github.com/syswonder/primitive-livox-mid360-lidar-rbnx
+    branch: main
+    config:
+      lidar_ip: ${LUMI_MID360_IP}
+      # Empty = let the provider resolve the host NIC with
+      # `ip route get <lidar_ip>`. Override only on a multi-NIC box where that
+      # picks the wrong interface.
+      host_ip: ""
+      publish_freq: 10.0
+      # Mounting pose of livox_frame in base_link (metres / radians). The CAD
+      # suggests the connector faces base_link −Y (yaw −π/2), but driving the
+      # robot showed the cloud rotated 180° from reality, so it is +π/2.
+      # The provider publishes this TF edge itself, so keep it out of the URDF.
+      parent_frame: base_link
+      extrinsics:
+        x: 0.098
+        y: 0.0
+        z: 0.190
+        roll: 0.0
+        pitch: 0.0
+        yaw: 1.5708
+
+  - name: mid360_imu
+    url: https://github.com/syswonder/primitive-livox-mid360-imu-rbnx
+    branch: main
+
 service:
   - name: mapping
     url: https://github.com/syswonder/service-map-rbnx
     branch: main
+    # No docker on the Jetson: the host already runs ROS 2 Humble plus
+    # ros-humble-rtabmap-ros, so map natively instead of in a container.
+    manifest: package_manifest.jetson-native.yaml
     config:
       params_file: config/rtabmap_params.yaml
-      # RGB-D only: the base laser is not reachable, so RTAB-Map runs on the
-      # head camera and takes the chassis pose as its external odometry.
+      # 3D lidar SLAM plus the chassis pose as external odometry. The cameras
+      # stay deployed for other uses but are deliberately not a mapping input:
+      # rtabmap syncs rgb + depth + camera_info + scan_cloud, so one camera
+      # dropping off USB freezes mapping completely (it happened: the grid just
+      # stopped growing with nothing in the logs). The MID-360 alone is enough
+      # for both mapping and localization and has no such coupling.
       sensor_providers:
-        rgb: head_camera
-        depth: head_camera
+        lidar3d: mid360_lidar
         odom: lumi_chassis
 
   - name: navigation
     url: https://github.com/syswonder/service-navigation-rbnx
     branch: main
+    manifest: package_manifest.jetson-native.yaml
     config:
       params_file: config/nav2_params.yaml
       provider_ids:
         map: mapping
         odom: lumi_chassis
+        # Live obstacle source for the costmaps (PointCloud2).
+        scan_cloud: mid360_lidar
         # No `scan` / `scan_cloud` binding on purpose: see config/nav2_params.yaml
+      # Required by the nav2 wrapper. 0.30 is the effective planar ceiling:
+      # max_vel_x is 0.30 with max_vel_y 0.0, so the looser max_speed_xy 0.35
+      # never applies; the chassis config caps at the same 0.3.
+      dynamic_speed:
+        max_linear_speed_mps: 0.3
+        default_percentage: 100

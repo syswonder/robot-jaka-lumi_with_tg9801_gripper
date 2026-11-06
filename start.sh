@@ -106,6 +106,39 @@ else
     echo "[start] rmw_zenohd ready on tcp/127.0.0.1:7447"
 fi
 
+# Scene's map pages shell out to the `rerun` CLI rather than embedding the
+# SDK, and rerun-sdk installs that binary inside scene's own native
+# environment, which is not on the boot PATH. Expose the newest one through
+# the deployment venv, which the manifest puts first on PATH. Scene's native
+# environment is content-addressed, so a rebuild moves the path and this has
+# to re-run; it is skipped when scene is not deployed or has no rerun.
+link_scene_rerun() {
+    local root rerun
+    root="$(rbnx path root 2>/dev/null)" || return 0
+    rerun="$(ls -1t "$root"/system/scene/rbnx-build/native/*/bin/rerun 2>/dev/null | head -1)"
+    [[ -x "$rerun" ]] || return 0
+    mkdir -p "$DEPLOY_DIR/.venv/bin"
+    ln -sfn "$rerun" "$DEPLOY_DIR/.venv/bin/rerun"
+    echo "[start] scene viewer: .venv/bin/rerun -> ${rerun#"$root"/}"
+}
+link_scene_rerun
+
+# Scene starts its rerun servers with start_new_session, so `rbnx shutdown`
+# cannot reap them. A surviving pair holds 9876/9877 and the next scene then
+# reports "the viewer could not start: port 9876 is in use" instead of drawing
+# the map pages. Clear them before booting; the bracket keeps the pattern from
+# matching this script's own command line.
+clear_stale_rerun() {
+    local pids
+    pids="$(pgrep -f '[r]erun --serve-grpc' || true)"
+    [[ -z "$pids" ]] && return 0
+    # shellcheck disable=SC2086
+    kill -TERM $pids 2>/dev/null || true
+    sleep 1
+    echo "[start] cleared stale rerun viewer(s): $(echo $pids | tr '\n' ' ')"
+}
+clear_stale_rerun
+
 # rbnx boot and its children (soma runtime reader, package start.sh scripts)
 # inherit the ROS environment sourced above. --no-update-check skips the
 # pre-boot per-package git fetch (offline / pinned cache; refresh via

@@ -106,19 +106,26 @@ Three topologies; pick one according to the goal:
    `libjakaAPI.so`. Place them in
    `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx/jaka_arm/jaka_sdk/aarch64-linux-gnu/`.
    Without them the arm package's `build.sh` fails fast and prints the path.
-4. **credentials**: the committed manifest keeps them as environment
-   placeholders — `${VLM_BASE_URL}`, `${VLM_API_KEY}`, `${VLM_MODEL}`,
-   `${LUMI_HEAD_CAMERA_SN}`, `${JAKA_WEB_PASSWORD}`, `${JAKA_SDK_PASSWORD}`.
-   Export those before
+4. **credentials and device addresses**: the committed manifest keeps them as
+   environment placeholders — `${VLM_BASE_URL}`, `${VLM_API_KEY}`, `${VLM_MODEL}`,
+   `${LUMI_HEAD_CAMERA_SN}`, `${LUMI_WAIST_CAMERA_SN}`, `${JAKA_WEB_PASSWORD}`,
+   `${JAKA_SDK_PASSWORD}`, `${LUMI_MID360_IP}`. Export those before
    `start.sh`, or put literal values in a gitignored
-   `robonix_manifest.local.yaml` (that is what this machine's copy does)
-   and the **head camera serial number** (two identical cameras must be pinned by
-   serial, otherwise the torso camera can be picked as the mapping camera).
+   `robonix_manifest.local.yaml` (that is what this machine's copy does).
+   Both camera serial numbers must be pinned: the two Gemini 2L units are
+   identical, so without a serial each provider opens whichever device the
+   driver enumerates first and the second one fails to start.
+   The MID-360 keeps the address it was flashed with, and that differs per
+   batch: Livox's default is `192.168.1.1XX`, XX being the last two digits of
+   the S/N (this unit ...0305 answers on `.105`). Read it off with Livox
+   Viewer 2 or the SDK's `livox_lidar_info_get`; `host_ip` stays empty so the
+   provider resolves the host NIC with `ip route get`.
 5. **The local manifest is fully offline**: `robonix_manifest.local.yaml` turns
-   all seven instances into `path:` entries pointing at sibling checkouts —
+   all ten instances into `path:` entries pointing at sibling checkouts —
    `primitive-jaka-lumi-chassis-rbnx`, `primitive-jaka-lumi-body-rbnx`,
    `primitive-jaka-mini_with_tg9801_gripper-arm_gripper-rbnx`,
    `primitive-orbbec-camera-rbnx`, `primitive-robot-description-rbnx`,
+   `primitive-livox-mid360-lidar-rbnx`, `primitive-livox-mid360-imu-rbnx`,
    `service-map-rbnx`, `service-navigation-rbnx`.
    The committed manifest keeps `url:`; a machine without those siblings either
    clones them or uses the committed manifest (first build needs network).
