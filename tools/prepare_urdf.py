@@ -55,6 +55,23 @@ PASSIVE_JOINTS = (
 #: Body joints published by lumi_body.
 BODY_JOINTS = ("l_1", "l_2", "l_3", "l_4")
 
+#: Camera bodies the vendor already models, and the frame each vendor link has
+#: to carry for the Orbbec driver. The driver publishes ``<camera_name>_link``
+#: (derived from the provider's ``camera_name`` config) as the root of its own
+#: TF subtree, and knows nothing about where the camera is bolted on; without
+#: these fixed joints the driver's frames form a second, unconnected tree and
+#: anything that transforms camera data into the robot frame (rtabmap, hand-eye
+#: calibration) fails with "not part of the same tree".
+#:
+#: Each edge must have exactly one publisher: this file publishes
+#: CameraN_Link -> <camera>_link, the driver publishes everything below it.
+#: Renaming a camera in the manifest means renaming it here too, otherwise the
+#: bridge silently stops matching.
+CAMERA_MOUNTS = (
+    ("Camera2_Link", "waist_camera_link"),
+    ("Camera3_Link", "head_camera_link"),
+)
+
 #: The CAD export has the drive-wheel axle along X (wheels at x = +-0.179) and
 #: the front sensors at negative Y, so the model's forward axis is -Y. ROS
 #: (REP-103) wants X forward, Y left, Z up. Wrapping the chassis in a new root
@@ -119,7 +136,37 @@ def transform(source: Path) -> ET.Element:
         )
 
     _wrap_base_link(root)
+    _mount_camera_frames(root)
     return root
+
+
+def _mount_camera_frames(root: ET.Element) -> None:
+    """Hang each driver root frame off the vendor's camera link.
+
+    The vendor already models the camera bodies (``CameraN_Link``), so only the
+    driver's own root frame and a fixed, identity edge are added. Identity means
+    "the vendor link IS the camera origin"; give a mount its own origin here if
+    a unit ever turns out to sit a few millimetres off.
+    """
+    links = {link.get("name") for link in root.iter("link")}
+    for parent_link, child_link in CAMERA_MOUNTS:
+        if parent_link not in links:
+            raise SystemExit(f"camera mount parent {parent_link} missing from the URDF")
+        if child_link in links:
+            continue
+
+        link = ET.SubElement(root, "link", {"name": child_link})
+        link.tail = "\n"
+
+        joint = ET.SubElement(
+            root,
+            "joint",
+            {"name": f"{parent_link}_to_{child_link}", "type": "fixed"},
+        )
+        joint.tail = "\n"
+        ET.SubElement(joint, "origin", {"xyz": "0 0 0", "rpy": "0 0 0"})
+        ET.SubElement(joint, "parent", {"link": parent_link})
+        ET.SubElement(joint, "child", {"link": child_link})
 
 
 def _wrap_base_link(root: ET.Element) -> None:
@@ -201,6 +248,19 @@ def verify(urdf: Path, meshes_dir: Path) -> list[str]:
                 problems.append(
                     f"wrapper yaw is {actual}, expected {math.radians(BASE_YAW_DEG):.6f} rad"
                 )
+
+    for parent_link, child_link in CAMERA_MOUNTS:
+        if child_link not in links:
+            problems.append(f"camera bridge link {child_link} is missing")
+        bridge = joints.get(f"{parent_link}_to_{child_link}")
+        if bridge is None:
+            problems.append(
+                f"camera bridge joint {parent_link} -> {child_link} is missing"
+            )
+        elif bridge.get("type") != "fixed":
+            problems.append(
+                f"camera bridge {parent_link} -> {child_link} is {bridge.get('type')}, expected fixed"
+            )
 
     for element in root.iter("mesh"):
         filename = element.get("filename", "")
