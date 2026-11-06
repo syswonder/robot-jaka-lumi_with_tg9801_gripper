@@ -76,9 +76,14 @@ robot:
           type: rgbd_camera
           urdf_link: Camera2_Link
           # Second RGB-D camera, the one the vendor hand-eye calibration targets
-          # (grasp guidance). Not driven in V1: both cameras share one USB 3.0
-          # port on the base panel. Wire it as a second orbbec instance later.
-          exports: []
+          # (grasp guidance). Driven by the waist_camera provider; it is not a
+          # mapping input.
+          exports:
+            - provider_id: waist_camera
+              capabilities:
+                - {path: robonix/primitive/camera/rgb,         description: "Color stream (1280x720)."}
+                - {path: robonix/primitive/camera/depth,       description: "Depth stream hardware-aligned to color."}
+                - {path: robonix/primitive/camera/camera_info, description: "Color stream intrinsics."}
         - id: head
           type: pan_tilt_head
           urdf_link: link_3
