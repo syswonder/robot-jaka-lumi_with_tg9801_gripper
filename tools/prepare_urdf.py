@@ -14,6 +14,8 @@ Robonix needs three things it does not provide:
 3. **Passive joints declared fixed** — wheels and casters have no encoder
    feedback, so as ``continuous`` joints they would simply be missing from the
    TF tree. As ``fixed`` they are published once on ``/tf_static``.
+4. **Body travel limits that match the hardware** — the vendor export still
+   carries the old lift/waist/pitch ranges, so ``BODY_LIMITS`` overwrites them.
 
 ``l_1..l_4`` (lift, waist, head yaw, head pitch) keep their vendor names: the
 body primitive publishes exactly those.
@@ -54,6 +56,15 @@ PASSIVE_JOINTS = (
 
 #: Body joints published by lumi_body.
 BODY_JOINTS = ("l_1", "l_2", "l_3", "l_4")
+
+#: Vendor travel limits are stale for three body axes, so they are overwritten on
+#: every run (in radians/metres, matching the URDF): lift 0..360 mm, waist ±140°,
+#: head pitch ±45°. ``l_3`` (head yaw ±180°) keeps the vendor value.
+BODY_LIMITS = {
+    "l_1": (0.0, 0.36),
+    "l_2": (-2.4435, 2.4435),
+    "l_4": (-0.7854, 0.7854),
+}
 
 #: Camera bodies the vendor already models, and the frame each vendor link has
 #: to carry for the Orbbec driver. The driver publishes ``<camera_name>_link``
@@ -135,9 +146,27 @@ def transform(source: Path) -> ET.Element:
             f"{source}: converted {fixed} passive joints, expected {len(PASSIVE_JOINTS)}"
         )
 
+    _apply_body_limits(root)
     _wrap_base_link(root)
     _mount_camera_frames(root)
     return root
+
+
+def _apply_body_limits(root: ET.Element) -> None:
+    """Overwrite the body-axis travel the vendor export still carries."""
+    applied = 0
+    for joint in root.iter("joint"):
+        bounds = BODY_LIMITS.get(joint.get("name", ""))
+        if bounds is None:
+            continue
+        limit = joint.find("limit")
+        if limit is None:
+            raise SystemExit(f"{joint.get('name')}: no <limit> to correct")
+        limit.set("lower", f"{bounds[0]:g}")
+        limit.set("upper", f"{bounds[1]:g}")
+        applied += 1
+    if applied != len(BODY_LIMITS):
+        raise SystemExit(f"corrected {applied} body limits, expected {len(BODY_LIMITS)}")
 
 
 def _mount_camera_frames(root: ET.Element) -> None:

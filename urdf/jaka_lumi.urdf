@@ -103,7 +103,7 @@
     <parent link="base_link_chassis" />
     <child link="link_1" />
     <axis xyz="0 0 1" />
-    <limit lower="0" upper="0.4" effort="0" velocity="0" />
+    <limit lower="0" upper="0.36" effort="0" velocity="0" />
   </joint>
   <link name="link_2">
     <inertial>
@@ -132,7 +132,7 @@
     <parent link="link_1" />
     <child link="link_2" />
     <axis xyz="0 0 1" />
-    <limit lower="-2.7925" upper="2.7925" effort="0" velocity="0" />
+    <limit lower="-2.4435" upper="2.4435" effort="0" velocity="0" />
   </joint>
   <link name="link_3">
     <inertial>
@@ -190,7 +190,7 @@
     <parent link="link_3" />
     <child link="link_4" />
     <axis xyz="0 0 1" />
-    <limit lower="-0.0872" upper="0.6108" effort="0" velocity="0" />
+    <limit lower="-0.7854" upper="0.7854" effort="0" velocity="0" />
   </joint>
   <link name="Camera3_Link">
     <inertial>

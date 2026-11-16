@@ -183,7 +183,7 @@ primitive:
       auto_enable: true
       state_publish_hz: 10.0
       joint_states_topic: /joint_states
-      lift_max_mm: 300.0
+      lift_max_mm: 360.0
       waist_max_deg: 140.0
       default_vel_pct: 10
       default_acc_pct: 10

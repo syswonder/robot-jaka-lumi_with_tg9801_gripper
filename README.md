@@ -92,6 +92,18 @@ Three topologies; pick one according to the goal:
 > neither `192.168.10.90` nor `192.168.10.10` is reachable:
 > `nmcli connection modify Lumi10000023 +ipv4.addresses 192.168.10.200/24`
 
+## Body axis travel (ext-axis, HTTP `:5000`)
+
+The four body axes are vendor "ext-axis" motors behind `192.168.10.90:5000`
+(`/api/extaxis/status` reports them in this order).
+
+| ID | Axis | Travel | Sign |
+|---|---|---|---|
+| 0 | lift (up/down) | 0–360 mm | 0 = bottom of the column |
+| 1 | waist (left/right rotation) | ±140° | 0 = straight ahead |
+| 2 | head yaw | ±180° | 0 = straight ahead |
+| 3 | head pitch | ±45° | negative = looking down, positive = looking up |
+
 ## Prerequisites
 
 1. **Robonix**: `make install` and `rbnx setup ~/robonix`.
@@ -149,10 +161,12 @@ python3 tools/prepare_urdf.py \
     --vendor-meshes "$LUMI_MODEL/meshes"
 ```
 
-It performs three transforms and verifies its own output: arm joints
+It performs four transforms and verifies its own output: arm joints
 `l_a1..a6` → `joint_1..joint_6` (matching the arm package's hardcoded names),
-`package://` mesh URIs → relative paths, and the ten encoder-less passive joints
-(wheels and casters) → `fixed` so they land in `/tf_static`. It also wraps the
+`package://` mesh URIs → relative paths, the ten encoder-less passive joints
+(wheels and casters) → `fixed` so they land in `/tf_static`, and the three stale
+body travel limits → `BODY_LIMITS` (`l_1` 0.36 m, `l_2` ±2.4435 rad, `l_4`
+±0.7854 rad). It also wraps the
 CAD chassis under a new `base_link` rotated by 90°, because the vendor model has
 the wheel axle along X and the forward sensors at -Y, i.e. **the model's forward
 axis is -Y**, which violates REP-103 (X forward, Y left). The rotation constant
